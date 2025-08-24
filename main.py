@@ -111,24 +111,22 @@ def book_room(req: BookingRequest):
     return {"message": "Booking successful", "booking_id": booking_id}
 
 @app.post("/bookings")
-async def get_bookings(request: Request):
-    # Get webhook payload
-    payload = await request.json()
+async def get_bookings():
     tool_call_id = "054e139e-e781-494a-b56a-926f5c05506f"
-    
+
     # Fetch bookings from DB
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM bookings WHERE status='booked'")
     bookings = cursor.fetchall()
-    
-    # Convert bookings list to a single string
+
+    # Convert bookings to single string
     bookings_str = ", ".join(
         [f"Room {b['room_id']} booked by user {b['user_id']} from {b['check_in']} to {b['check_out']}" 
          for b in bookings]
     ) or "No rooms are currently booked."
-    
-    # Return in VAPI-required format
+
+    # Return VAPI-required format
     return {
         "results": [
             {
