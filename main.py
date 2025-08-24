@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
 import mysql.connector
@@ -110,27 +110,33 @@ def book_room(req: BookingRequest):
     db.close()
     return {"message": "Booking successful", "booking_id": booking_id}
 
-@app.post("/bookings", response_model=List[Booking])
-def get_bookings():
+@app.post("/bookings")
+async def get_bookings(request: Request):
+    # Get webhook payload
+    payload = await request.json()
+    tool_call_id = payload.get("toolCallId", "call_undefined")
+    
+    # Fetch bookings from DB
     db = get_db()
     cursor = db.cursor(dictionary=True)
-
-    sql = "SELECT id, user_id, room_id, check_in, check_out, status, notes FROM bookings"
-    cursor.execute(sql)
+    cursor.execute("SELECT * FROM bookings WHERE status='booked'")
     bookings = cursor.fetchall()
-
-    cursor.close()
-    db.close()
-
-    if not bookings:
-        raise HTTPException(status_code=404, detail="No bookings found")
     
-    # Convert datetime.date to string
-    for b in bookings:
-        b["check_in"] = b["check_in"].strftime("%Y-%m-%d")
-        b["check_out"] = b["check_out"].strftime("%Y-%m-%d")
+    # Convert bookings list to a single string
+    bookings_str = ", ".join(
+        [f"Room {b['room_id']} booked by user {b['user_id']} from {b['check_in']} to {b['check_out']}" 
+         for b in bookings]
+    ) or "No rooms are currently booked."
     
-    return bookings
+    # Return in VAPI-required format
+    return {
+        "results": [
+            {
+                "toolCallId": tool_call_id,
+                "result": bookings_str
+            }
+        ]
+    }
 
 # Cancel a booking
 @app.delete("/cancel")
