@@ -53,7 +53,7 @@ def get_free_rooms(req: FreeRoomsRequest):
     sql = """
     SELECT * FROM rooms
     WHERE id NOT IN (
-        SELECT room_id FROM bookings
+        SELECT room_id FROM bookings    
         WHERE NOT (check_out <= %s OR check_in >= %s)
     )
     """
@@ -66,7 +66,11 @@ def get_free_rooms(req: FreeRoomsRequest):
 
     if not free_rooms:
         raise HTTPException(status_code=404, detail="No rooms available for these dates")
-    
+
+    for r in free_rooms:
+        r["check_in"] = r.get("check_in").strftime("%Y-%m-%d") if r.get("check_in") else None
+        r["check_out"] = r.get("check_out").strftime("%Y-%m-%d") if r.get("check_out") else None
+
     return free_rooms
 
 # Book a room
@@ -97,6 +101,11 @@ def get_bookings():
 
     if not bookings:
         raise HTTPException(status_code=404, detail="No bookings found")
+    
+    # Convert datetime.date to string
+    for b in bookings:
+        b["check_in"] = b["check_in"].strftime("%Y-%m-%d")
+        b["check_out"] = b["check_out"].strftime("%Y-%m-%d")
     
     return bookings
 
