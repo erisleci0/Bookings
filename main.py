@@ -110,6 +110,11 @@ def book_room(req: BookingRequest):
     db.close()
     return {"message": "Booking successful", "booking_id": booking_id}
 
+import json
+from fastapi import FastAPI
+
+app = FastAPI()
+
 @app.post("/bookings")
 async def get_bookings():
     tool_call_id = "054e139e-e781-494a-b56a-926f5c05506f"
@@ -133,12 +138,12 @@ async def get_bookings():
         for b in bookings
     ] or []
 
-    # Return in VAPI-required wrapper
+    # ✅ Stringify the list for VAPI
     return {
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": bookings_list  # <-- structured JSON
+                "result": json.dumps(bookings_list)  # <-- string, not array
             }
         ]
     }
