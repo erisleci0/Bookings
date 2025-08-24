@@ -114,7 +114,7 @@ def book_room(req: BookingRequest):
 async def get_bookings(request: Request):
     # Get webhook payload
     payload = await request.json()
-    tool_call_id = payload.get("toolCallId", "call_undefined")
+    tool_call_id = "054e139e-e781-494a-b56a-926f5c05506f"
     
     # Fetch bookings from DB
     db = get_db()
