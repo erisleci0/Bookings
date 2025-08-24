@@ -120,21 +120,29 @@ async def get_bookings():
     cursor.execute("SELECT * FROM bookings WHERE status='booked'")
     bookings = cursor.fetchall()
 
-    # Convert bookings to single string
-    bookings_str = ", ".join(
-        [f"Room {b['room_id']} booked by user {b['user_id']} from {b['check_in']} to {b['check_out']}" 
-         for b in bookings]
-    ) or "No rooms are currently booked."
+    # Format bookings as JSON array
+    bookings_list = [
+        {
+            "room_id": b["room_id"],
+            "user_id": b["user_id"],
+            "check_in": str(b["check_in"]),
+            "check_out": str(b["check_out"]),
+            "status": b["status"],
+            "notes": b["notes"]
+        }
+        for b in bookings
+    ] or []
 
-    # Return VAPI-required format
+    # Return in VAPI-required wrapper
     return {
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": bookings_str
+                "result": bookings_list  # <-- structured JSON
             }
         ]
     }
+
 
 # Cancel a booking
 @app.delete("/cancel")
