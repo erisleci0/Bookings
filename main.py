@@ -110,7 +110,7 @@ def book_room(req: BookingRequest):
     db.close()
     return {"message": "Booking successful", "booking_id": booking_id}
 
-@app.get("/bookings", response_model=List[Booking])
+@app.post("/bookings", response_model=List[Booking])
 def get_bookings():
     db = get_db()
     cursor = db.cursor(dictionary=True)
