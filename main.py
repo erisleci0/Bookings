@@ -143,7 +143,7 @@ async def get_bookings():
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": json.dumps(bookings_list)  # <-- string, not array
+                "result": "Room 1 is booked, between September 1st and September 5th and rooms 2 and 3 are not booked"
             }
         ]
     }
