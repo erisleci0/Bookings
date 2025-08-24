@@ -3,16 +3,38 @@ from pydantic import BaseModel
 from typing import Optional, List
 import mysql.connector
 import os
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+DB_HOST = os.environ.get("DB_HOST")
+DB_USER = os.environ.get("DB_USER")
+DB_PASS = os.environ.get("DB_PASS")
+DB_NAME = os.environ.get("DB_NAME")
+DB_PORT = os.environ.get("DB_PORT")
+
+if not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
+    raise RuntimeError("Database environment variables not set!")
+
 
 app = FastAPI()
+
+ssl_path = os.path.join(os.path.dirname(__file__), "ca.pem")
+if not os.path.isfile(ssl_path):
+    raise RuntimeError(f"CA certificate not found at {ssl_path}")
+
 
 # DB connection (adjust credentials)
 def get_db():
     return mysql.connector.connect(
-        host=os.environ["DB_HOST"],
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASS"],
-        database=os.environ["DB_NAME"]
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASS,
+        database=DB_NAME,
+        port=DB_PORT,
+        ssl_ca=ssl_path,          # if Aiven provides a CA certificate, use it
+        ssl_disabled=False
     )
 
 # Request models
