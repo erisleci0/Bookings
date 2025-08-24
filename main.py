@@ -35,6 +35,15 @@ class Room(BaseModel):
     capacity: int
     price_per_night: float
 
+class Booking(BaseModel):
+    id: int
+    user_id: int
+    room_id: int
+    check_in: str
+    check_out: str
+    status: Optional[str] = "booked"
+    notes: Optional[str] = None
+
 @app.post("/rooms/free", response_model=List[Room])
 def get_free_rooms(req: FreeRoomsRequest):
     db = get_db()
@@ -73,6 +82,23 @@ def book_room(req: BookingRequest):
     cursor.close()
     db.close()
     return {"message": "Booking successful", "booking_id": booking_id}
+
+@app.get("/bookings", response_model=List[Booking])
+def get_bookings():
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    sql = "SELECT id, user_id, room_id, check_in, check_out, status, notes FROM bookings"
+    cursor.execute(sql)
+    bookings = cursor.fetchall()
+
+    cursor.close()
+    db.close()
+
+    if not bookings:
+        raise HTTPException(status_code=404, detail="No bookings found")
+    
+    return bookings
 
 # Cancel a booking
 @app.delete("/cancel")
