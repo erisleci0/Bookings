@@ -231,7 +231,7 @@ async def get_bookings(req: CheckRoomsRequest):
     if free:
         parts.append(f"room {', '.join(free)} {'is' if len(free)==1 else 'are'} free")
 
-    result_text = " and ".join(parts) + ". Would you like to continue with booking one of the available rooms?"
+    result_text = " and ".join(parts) + "."
 
     cursor.close()
     db.close()
