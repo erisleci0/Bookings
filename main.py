@@ -67,6 +67,38 @@ class Booking(BaseModel):
     status: Optional[str] = "booked"
     notes: Optional[str] = None
 
+
+class UserRequest(BaseModel):
+    name: str
+    email: str
+
+class CheckRoomsRequest(BaseModel):
+    check_in: str
+    check_out: str
+
+
+@app.post("/users")
+def create_user(req: UserRequest):
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        sql = "INSERT INTO users (name, email) VALUES (%s, %s, %s)"
+        values = (req.name, req.email)
+        cursor.execute(sql, values)
+        db.commit()
+        user_id = cursor.lastrowid
+    except mysql.connector.Error as e:
+        db.rollback()
+        cursor.close()
+        db.close()
+        raise HTTPException(status_code=400, detail=str(e))
+
+    cursor.close()
+    db.close()
+
+    return {"message": "User created successfully", "user_id": user_id}
+
 @app.post("/rooms/free", response_model=List[Room])
 def get_free_rooms(req: FreeRoomsRequest):
     db = get_db()
@@ -96,6 +128,71 @@ def get_free_rooms(req: FreeRoomsRequest):
 
     return free_rooms
 
+
+@app.post("/confirm_booking")
+async def confirm_booking(request: Request):
+    body = await request.json()
+    tool_call_id = "054e139e-e781-494a-b56a-926f5c05506f"
+    params = body.get("parameters", {})
+
+    name = params.get("name")
+    email = params.get("email")
+    check_in = params.get("check_in")
+    check_out = params.get("check_out")
+    room_number = params.get("room_number")  # fixed key
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    # 1. Insert or get existing user
+    cursor.execute("SELECT id FROM users WHERE email=%s", (email,))
+    row = cursor.fetchone()
+    if row:
+        user_id = row["id"]
+    else:
+        cursor.execute(
+            "INSERT INTO users (name, email) VALUES (%s, %s)",
+            (name, email)
+        )
+        db.commit()
+        user_id = cursor.lastrowid
+
+    # 2. Look up the room ID
+    cursor.execute("SELECT id FROM rooms WHERE room_number = %s", (room_number,))
+    room = cursor.fetchone()
+    if not room:
+        raise HTTPException(status_code=400, detail=f"Room {room_number} does not exist")
+    room_id = room["id"]
+
+    # 3. Insert the booking
+    cursor.execute(
+        "INSERT INTO bookings (user_id, room_id, check_in, check_out) VALUES (%s, %s, %s, %s)",
+        (user_id, room_id, check_in, check_out)
+    )
+    db.commit()
+    booking_id = cursor.lastrowid
+
+    # 4. Update the room status to 'booked'
+    cursor.execute(
+        "UPDATE rooms SET status = 'booked' WHERE id = %s",
+        (room_id,)
+    )
+    db.commit()
+
+    cursor.close()
+    db.close()
+
+    return {
+        "results": [
+            {
+                "toolCallId": tool_call_id,
+                "result": f"Booking confirmed for {name} (ID {booking_id}) from {check_in} to {check_out}"
+            }
+        ]
+    }
+
+
+
 # Book a room
 @app.post("/book")
 def book_room(req: BookingRequest):
@@ -110,44 +207,38 @@ def book_room(req: BookingRequest):
     db.close()
     return {"message": "Booking successful", "booking_id": booking_id}
 
-import json
-from fastapi import FastAPI
-
-app = FastAPI()
+# duhet qe permes VAPI-it me dergu ne request checkin edhe checkout e tani permes qatyne vlerave me kqyr qe ne mes ktyne datave a osht i e lire apo e nxanen ndonje banes
 
 @app.post("/bookings")
-async def get_bookings():
+async def get_bookings(req: CheckRoomsRequest):
     tool_call_id = "054e139e-e781-494a-b56a-926f5c05506f"
 
-    # Fetch bookings from DB
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM bookings WHERE status='booked'")
-    bookings = cursor.fetchall()
 
-    # Format bookings as JSON array
-    bookings_list = [
-        {
-            "room_id": b["room_id"],
-            "user_id": b["user_id"],
-            "check_in": str(b["check_in"]),
-            "check_out": str(b["check_out"]),
-            "status": b["status"],
-            "notes": b["notes"]
-        }
-        for b in bookings
-    ] or []
+    # Get all rooms and their status
+    cursor.execute("SELECT room_number, type, status FROM rooms")
+    all_rooms = cursor.fetchall()
 
-    # ✅ Stringify the list for VAPI
+    # Prepare custom result string
+    result_strings = []
+    for room in all_rooms:
+        result_strings.append(f"Room {room['room_number']} ({room['type']}) is {room['status']}")
+
+    result_text = "; ".join(result_strings)
+
+    cursor.close()
+    db.close()
+
+    # ✅ Return in VAPI format
     return {
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": "Room 1 is booked, between September 1st and September 5th and rooms 2 and 3 are not booked"
+                "result": result_text
             }
         ]
     }
-
 
 # Cancel a booking
 @app.delete("/cancel")
