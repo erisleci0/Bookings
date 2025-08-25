@@ -220,12 +220,18 @@ async def get_bookings(req: CheckRoomsRequest):
     cursor.execute("SELECT room_number, type, status FROM rooms")
     all_rooms = cursor.fetchall()
 
-    # Prepare custom result string
-    result_strings = []
-    for room in all_rooms:
-        result_strings.append(f"Room {room['room_number']} ({room['type']}) is {room['status']}")
+    # Separate occupied and free rooms
+    booked = [str(r["room_number"]) for r in all_rooms if r["status"].lower() == "booked"]
+    free = [str(r["room_number"]) for r in all_rooms if r["status"].lower() == "free"]
 
-    result_text = "; ".join(result_strings)
+    # Build readable sentence
+    parts = []
+    if booked:
+        parts.append(f"Room {', '.join(booked)} {'is' if len(booked)==1 else 'are'} booked")
+    if free:
+        parts.append(f"room {', '.join(free)} {'is' if len(free)==1 else 'are'} free")
+
+    result_text = " and ".join(parts) + ". Would you like to continue with booking one of the available rooms?"
 
     cursor.close()
     db.close()
@@ -239,6 +245,7 @@ async def get_bookings(req: CheckRoomsRequest):
             }
         ]
     }
+
 
 # Cancel a booking
 @app.delete("/cancel")
