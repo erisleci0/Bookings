@@ -139,7 +139,10 @@ async def confirm_booking(request: Request):
     email = params.get("email")
     check_in = params.get("check_in")
     check_out = params.get("check_out")
-    room_number = params.get("room_number")  # fixed key
+    room_numbers = params.get("room_numbers", [])  # list of room numbers
+
+    if not room_numbers:
+        raise HTTPException(status_code=400, detail="At least one room must be provided")
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -157,27 +160,31 @@ async def confirm_booking(request: Request):
         db.commit()
         user_id = cursor.lastrowid
 
-    # 2. Look up the room ID
-    cursor.execute("SELECT id FROM rooms WHERE room_number = %s", (room_number,))
-    room = cursor.fetchone()
-    if not room:
-        raise HTTPException(status_code=400, detail=f"Room {room_number} does not exist")
-    room_id = room["id"]
+    booking_ids = []
 
-    # 3. Insert the booking
-    cursor.execute(
-        "INSERT INTO bookings (user_id, room_id, check_in, check_out) VALUES (%s, %s, %s, %s)",
-        (user_id, room_id, check_in, check_out)
-    )
-    db.commit()
-    booking_id = cursor.lastrowid
+    # 2. Loop through rooms
+    for room_number in room_numbers:
+        cursor.execute("SELECT id FROM rooms WHERE room_number = %s", (room_number,))
+        room = cursor.fetchone()
+        if not room:
+            raise HTTPException(status_code=400, detail=f"Room {room_number} does not exist")
+        room_id = room["id"]
 
-    # 4. Update the room status to 'booked'
-    cursor.execute(
-        "UPDATE rooms SET status = 'booked' WHERE id = %s",
-        (room_id,)
-    )
-    db.commit()
+        # 3. Insert the booking
+        cursor.execute(
+            "INSERT INTO bookings (user_id, room_id, check_in, check_out) VALUES (%s, %s, %s, %s)",
+            (user_id, room_id, check_in, check_out)
+        )
+        db.commit()
+        booking_id = cursor.lastrowid
+        booking_ids.append(booking_id)
+
+        # 4. Update the room status to 'booked'
+        cursor.execute(
+            "UPDATE rooms SET status = 'booked' WHERE id = %s",
+            (room_id,)
+        )
+        db.commit()
 
     cursor.close()
     db.close()
@@ -186,7 +193,8 @@ async def confirm_booking(request: Request):
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": f"Booking confirmed for {name} (ID {booking_id}) from {check_in} to {check_out}"
+                "result": f"Booking confirmed for {name} (Booking IDs {booking_ids}) "
+                          f"for rooms {room_numbers} from {check_in} to {check_out}"
             }
         ]
     }
