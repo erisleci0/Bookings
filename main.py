@@ -4,7 +4,12 @@ from typing import Optional, List
 import mysql.connector
 import os
 from dotenv import load_dotenv
-import os
+import random
+import string
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
+
 
 load_dotenv()
 
@@ -170,14 +175,16 @@ async def confirm_booking(request: Request):
             raise HTTPException(status_code=400, detail=f"Room {room_number} does not exist")
         room_id = room["id"]
 
-        # 3. Insert the booking
+        book_code = generate_booking_code()
+
         cursor.execute(
-            "INSERT INTO bookings (user_id, room_id, check_in, check_out) VALUES (%s, %s, %s, %s)",
-            (user_id, room_id, check_in, check_out)
+            "INSERT INTO bookings (user_id, room_id, check_in, check_out, book_id) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, room_id, check_in, check_out, book_code)
         )
+        
         db.commit()
         booking_id = cursor.lastrowid
-        booking_ids.append(booking_id)
+        booking_ids.append({"id": booking_id, "book_code": book_code})
 
         # 4. Update the room status to 'booked'
         cursor.execute(
@@ -188,13 +195,27 @@ async def confirm_booking(request: Request):
 
     cursor.close()
     db.close()
+    # After loop
+    booking_info_for_email = []
+    for room_number, b in zip(room_numbers, booking_ids):
+        booking_info_for_email.append({"room_number": room_number, "book_code": b["book_code"]})
+        
+    email = "lecieris00@gmail.com"
+    send_booking_email(email, name, booking_info_for_email)
+
+    room_list = ", ".join(room_numbers)
+    result_string = (
+        f"Hi {name}, your booking for room{'s' if len(room_numbers) > 1 else ''} "
+        f"{room_list} from {check_in} to {check_out} has been successfully confirmed. "
+        f"We've also sent some additional details to your email."
+)
+
 
     return {
         "results": [
             {
                 "toolCallId": tool_call_id,
-                "result": f"Booking confirmed for {name} (Booking IDs {booking_ids}) "
-                          f"for rooms {room_numbers} from {check_in} to {check_out}"
+                "result": result_string
             }
         ]
     }
@@ -268,3 +289,58 @@ def cancel_booking(req: CancelRequest):
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Booking not found")
     return {"message": "Booking canceled"}
+
+def send_booking_email(to_email, name, bookings):
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    import smtplib
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Booking Confirmation"
+    msg["From"] = "lecieris0@gmail.com"
+    msg["To"] = to_email
+
+    # Build booking rows
+    booking_rows = ""
+    for b in bookings:
+        booking_rows += f"""
+        <tr style="background-color:#f9f9f9; text-align:center;">
+            <td style="padding:10px;">{b['room_number']}</td>
+            <td style="padding:10px; font-weight:bold; color:#2a9d8f;">{b['book_code']}</td>
+        </tr>
+        """
+
+    # HTML content without logo
+    html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color:#f2f2f2; padding:20px;">
+        <div style="max-width:600px; margin:auto; background-color:#ffffff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+            <h2 style="color:#264653;">Hi {name},</h2>
+            <p style="color:#333;">Thank you for your booking! Here are your details:</p>
+            <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+                <tr style="background-color:#264653; color:#fff;">
+                    <th style="padding:10px;">Room</th>
+                    <th style="padding:10px;">Booking Code</th>
+                </tr>
+                {booking_rows}
+            </table>
+            <p style="margin-top:20px; color:#333;">Please keep this code safe; our AI assistant can find your booking using it.</p>
+            <p style="color:#888; font-size:12px;">© 2025 Your Hotel Name</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(html, "html"))
+
+    # Send via Gmail SMTP
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login("lecieris0@gmail.com", "lgpv dcgg pppt itba")  # your app password
+        server.send_message(msg)
+
+
+
+def generate_booking_code(length=5):
+    """Generate a random alphanumeric code like 'AB12C'."""
+    characters = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(characters, k=length))
