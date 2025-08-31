@@ -296,7 +296,7 @@ def cancel_booking(req: CancelRequest):
     db.commit()
 
     # Free up the room (optional, but usually expected)
-    cursor.execute("UPDATE rooms SET status = 'available' WHERE id = %s", (booking["room_id"],))
+    cursor.execute("UPDATE rooms SET status = 'free' WHERE id = %s", (booking["room_id"],))
     db.commit()
 
     cursor.close()
