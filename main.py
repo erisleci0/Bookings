@@ -49,7 +49,7 @@ class BookingRequest(BaseModel):
     check_out: str  # YYYY-MM-DD
 
 class CancelRequest(BaseModel):
-    booking_id: int
+    book_code: str
 
 class FreeRoomsRequest(BaseModel):
     check_in: str   # YYYY-MM-DD
@@ -280,15 +280,43 @@ async def get_bookings(req: CheckRoomsRequest):
 @app.delete("/cancel")
 def cancel_booking(req: CancelRequest):
     db = get_db()
-    cursor = db.cursor()
-    sql = "DELETE FROM bookings WHERE id = %s"
-    cursor.execute(sql, (req.booking_id,))
+    cursor = db.cursor(dictionary=True)
+
+    # Look up booking by book_code
+    cursor.execute("SELECT id, user_id, room_id, check_in, check_out FROM bookings WHERE book_id = %s", (req.book_code,))
+    booking = cursor.fetchone()
+
+    if not booking:
+        cursor.close()
+        db.close()
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Delete booking
+    cursor.execute("DELETE FROM bookings WHERE id = %s", (booking["id"],))
     db.commit()
+
+    # Free up the room (optional, but usually expected)
+    cursor.execute("UPDATE rooms SET status = 'available' WHERE id = %s", (booking["room_id"],))
+    db.commit()
+
     cursor.close()
     db.close()
-    if cursor.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    return {"message": "Booking canceled"}
+
+    # Build human-friendly response (similar to confirm_booking)
+    result_string = (
+        f"Your booking for room {booking['room_id']} "
+        f"from {booking['check_in']} to {booking['check_out']} has been successfully canceled."
+    )
+
+    return {
+        "results": [
+            {
+                "toolCallId": "cancel_001",  # or generate dynamically
+                "result": result_string
+            }
+        ]
+    }
+
 
 def send_booking_email(to_email, name, bookings):
     from email.mime.multipart import MIMEMultipart
